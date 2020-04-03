@@ -15,12 +15,32 @@
 #
 server.port: 7001
 
-# Channel -> Connector mapping
-mp.messaging.incoming.channel1-from-connector.connector: coherence
-mp.messaging.incoming.channel2-from-connector.connector: coherence
-mp.messaging.incoming.channel3-from-connector.connector: coherence
-mp.messaging.outgoing.channel-to-connector.connector: coherence
+# Channel specific configuration properties
+mp:
+  messaging:
+    incoming:
+      channel1-from-connector:
+        connector: coherence
+        coherence-topic-name: example-topic
+      channel2-from-connector:
+        connector: coherence
+        coherence-topic-name: example-topic
+      channel3-from-connector:
+        connector: coherence
+        coherence-topic-name: example-topic
+    outgoing:
+      channel-to-connector:
+        connector: coherence
+        coherence-topic-name: example-topic
 
-# Connector configuration properties
-mp.messaging.connector.coherence.coherence-topic-name: example-topic
+# Connector configuration properties(common for all channels)
+mp.messaging.connector.coherence.coherence-settings:
+  tangosol.coherence.ttl: 0
+  tangosol.coherence.clusteraddress: 127.0.0.1
+  coherence.distribution.2server: false
+  coherence.wka: 127.0.0.1
+  coherence.ttl: 0
+  with.http: true
+  coherence.cluster: kecCluster
+
 

@@ -38,11 +38,6 @@
             <version>${cogherence.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.oracle.coherence</groupId>
-            <artifactId>coherence-rest</artifactId>
-            <version>${cogherence.version}</version>
-        </dependency>
-        <dependency>
             <groupId>io.helidon.microprofile.messaging</groupId>
             <artifactId>helidon-microprofile-messaging</artifactId>
         </dependency>
@@ -55,10 +50,6 @@
             <artifactId>jandex</artifactId>
             <scope>runtime</scope>
             <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>javax.activation</groupId>
-            <artifactId>javax.activation-api</artifactId>
         </dependency>
     </dependencies>
     <build>

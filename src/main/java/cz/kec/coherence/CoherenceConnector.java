@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -37,6 +38,7 @@ import com.tangosol.net.topic.Subscriber;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
+import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
 import org.eclipse.microprofile.reactive.messaging.spi.IncomingConnectorFactory;
 import org.eclipse.microprofile.reactive.messaging.spi.OutgoingConnectorFactory;
 import org.eclipse.microprofile.reactive.streams.operators.PublisherBuilder;
@@ -49,25 +51,30 @@ public class CoherenceConnector implements IncomingConnectorFactory, OutgoingCon
 
     private static final Logger LOGGER = Logger.getLogger(CoherenceConnector.class.getName());
 
-    static {
-        System.setProperty("tangosol.coherence.ttl", "0");
-        System.setProperty("tangosol.coherence.clusteraddress", "127.0.0.1");
-        System.setProperty("coherence.distribution.2server", "false");
-        System.setProperty("coherence.wka", "127.0.0.1");
-        System.setProperty("coherence.ttl", "0");
-        System.setProperty("with.http", "true");
-        System.setProperty("coherence.cluster", "kecCluster");
-    }
-
     private final ExecutorService executorService = Executors.newWorkStealingPool();
-    private final List<Runnable> closables = new ArrayList<>();
+    private final List<Runnable> closeables = new ArrayList<>();
 
 
     @Override
     public PublisherBuilder<? extends Message<?>> getPublisherBuilder(final Config config) {
 
-        // Config context is merged from channel and connector contexts
+        String channelName = config.getValue(ConnectorFactory.CHANNEL_NAME_ATTRIBUTE, String.class);
+
+        // Topic name from channel context
         String topicName = config.getValue("coherence-topic-name", String.class);
+
+        LOGGER.info("Preparing publisher for channel " + channelName);
+
+        // coherence-settings from connector context
+        ((io.helidon.config.Config) config)
+                .get("coherence-settings")
+                .detach()
+                .asMap()
+                .get()
+                .forEach((k, v) -> {
+                    LOGGER.info("Setting system prop: " + k + "=" + v);
+                    System.setProperty(k, v);
+                });
 
         Session session = Session.create(WithConfiguration.autoDetect());
         NamedTopic<String> topic = session.getTopic(topicName);
@@ -75,7 +82,7 @@ public class CoherenceConnector implements IncomingConnectorFactory, OutgoingCon
 
         SubmissionPublisher<Message<String>> publisher = new SubmissionPublisher<>();
 
-        closables.add(() -> {
+        closeables.add(() -> {
             LOGGER.log(Level.INFO, "Closing connection to topic: " + topicName);
             try {
                 session.close();
@@ -99,13 +106,30 @@ public class CoherenceConnector implements IncomingConnectorFactory, OutgoingCon
 
     @Override
     public SubscriberBuilder<? extends Message<?>, Void> getSubscriberBuilder(final Config config) {
+
+        String channelName = config.getValue(ConnectorFactory.CHANNEL_NAME_ATTRIBUTE, String.class);
+
+        // Topic name from channel context
         String topicName = config.getValue("coherence-topic-name", String.class);
+
+        LOGGER.info("Preparing subscriber for channel " + channelName);
+
+        // coherence-settings from connector context
+        ((io.helidon.config.Config) config)
+                .get("coherence-settings")
+                .detach()
+                .asMap()
+                .get()
+                .forEach((k, v) -> {
+                    LOGGER.info("Setting system prop: " + k + "=" + v);
+                    System.setProperty(k, v);
+                });
 
         Session session = Session.create();
         NamedTopic<String> topic = session.getTopic(topicName);
         Publisher<String> publisher = topic.createPublisher();
 
-        closables.add(() -> {
+        closeables.add(() -> {
             LOGGER.log(Level.INFO, "Closing connection to topic: " + topicName);
             try {
                 session.close();
@@ -122,6 +146,12 @@ public class CoherenceConnector implements IncomingConnectorFactory, OutgoingCon
     }
 
     private void onShutdown(@Observes @BeforeDestroyed(ApplicationScoped.class) final Object event) {
-        closables.forEach(Runnable::run);
+        closeables.forEach(Runnable::run);
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(200, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.SEVERE, "Error when closing coherence connector executor service.", e);
+        }
     }
 }
